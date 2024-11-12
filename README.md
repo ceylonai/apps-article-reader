@@ -9,6 +9,11 @@
   [![Python 3.7+](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://www.python.org/downloads/)
   [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
   [![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.ai)
+
+   <a href="https://www.buymeacoffee.com/ceylon">
+    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;">
+   </a>
+
 </div>
 
 ## Introduction
