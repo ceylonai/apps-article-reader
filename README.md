@@ -1,15 +1,37 @@
-# Content Extractor
+
+<div align="center">
+  <img src="docs/cover-photo.png" alt="Content Extractor Dashboard Banner" width="100%">
+
+  # Content Extractor
+  
+  📰 A powerful desktop application for extracting and analyzing content from web URLs 
+  
+  [![Python 3.7+](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://www.python.org/downloads/)
+  [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+  [![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.ai)
+</div>
+
+## Introduction
 
 A powerful desktop application for extracting and analyzing content from web URLs. Built with Python and Tkinter, this tool provides a user-friendly interface for processing multiple URLs simultaneously, extracting key information, and saving results locally.
 
-## Features
+## ✨ Features
 
-- **URL Processing**: Process multiple URLs simultaneously with a queue-based system
-- **Content Analysis**: Extract titles, keywords, summaries, and generate relevant hashtags
-- **Progress Tracking**: Real-time status updates and progress monitoring for each task
-- **Auto-save**: Automatically save processed content to local files
-- **Task Management**: Pause, restart, or review completed tasks
-- **Configurable Settings**: Customize save directory and auto-save preferences
+- 🔗 **URL Processing**: Process multiple URLs simultaneously with a queue-based system
+- 🤖 **Content Analysis**: Extract titles, keywords, summaries, and generate relevant hashtags
+- 📊 **Progress Tracking**: Real-time status updates and progress monitoring for each task
+- 💾 **Auto-save**: Automatically save processed content to local files
+- ⚙️ **Task Management**: Pause, restart, or review completed tasks
+- 🎛️ **Configurable Settings**: Customize save directory and auto-save preferences
+
+
+## Screenshots
+
+<div align="center">
+  <img src="docs/screenshot.png" alt="Content Extractor Dashboard" width="25%">
+  <img src="docs/tasks.png" alt="Content Extractor Dashboard" width="25%">
+   <img src="docs/results.png" alt="Content Extractor Dashboard" width="25%">
+</div>
 
 ## Prerequisites
 
