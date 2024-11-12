@@ -1,8 +1,10 @@
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import ttk, scrolledtext, messagebox, filedialog
 from typing import Dict
 import threading
-from content_extractor import ContentExtractor, save_to_file  # Assuming original code is in content_extractor.py
+from content_extractor import ContentExtractor, save_to_file
+import os
+import json
 
 
 class ContentExtractorGUI:
@@ -14,14 +16,50 @@ class ContentExtractorGUI:
         # Initialize ContentExtractor
         self.extractor = ContentExtractor(model_name="llama3.2")
 
+        # Load last used directory
+        self.config_file = "content_extractor_config.json"
+        self.project_dir = self.load_last_directory()
+
         # Create and configure grid
         self.root.grid_columnconfigure(0, weight=1)
         self.create_widgets()
 
+    def load_last_directory(self):
+        """Load the last used directory from config file"""
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    return config.get('last_directory', os.getcwd())
+        except Exception:
+            pass
+        return os.getcwd()
+
+    def save_last_directory(self):
+        """Save the current directory to config file"""
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump({'last_directory': self.project_dir}, f)
+        except Exception:
+            pass
+
     def create_widgets(self):
+        # Project Location Frame
+        location_frame = ttk.LabelFrame(self.root, text="Project Location", padding="10")
+        location_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+        location_frame.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(location_frame, text="Save Location:").grid(row=0, column=0, padx=5)
+        self.location_entry = ttk.Entry(location_frame)
+        self.location_entry.grid(row=0, column=1, sticky="ew", padx=5)
+        self.location_entry.insert(0, self.project_dir)
+
+        self.browse_button = ttk.Button(location_frame, text="Browse", command=self.browse_location)
+        self.browse_button.grid(row=0, column=2, padx=5)
+
         # URL Input Frame
         url_frame = ttk.LabelFrame(self.root, text="URL Input", padding="10")
-        url_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+        url_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
         url_frame.grid_columnconfigure(0, weight=1)
 
         self.url_entry = ttk.Entry(url_frame)
@@ -32,7 +70,7 @@ class ContentExtractorGUI:
 
         # Progress Frame
         progress_frame = ttk.Frame(self.root, padding="10")
-        progress_frame.grid(row=1, column=0, sticky="ew", padx=10)
+        progress_frame.grid(row=2, column=0, sticky="ew", padx=10)
         progress_frame.grid_columnconfigure(0, weight=1)
 
         self.status_label = ttk.Label(progress_frame, text="Status: Ready")
@@ -43,9 +81,9 @@ class ContentExtractorGUI:
 
         # Results Frame
         results_frame = ttk.LabelFrame(self.root, text="Results", padding="10")
-        results_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
+        results_frame.grid(row=3, column=0, sticky="nsew", padx=10, pady=5)
         results_frame.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(2, weight=1)
+        self.root.grid_rowconfigure(3, weight=1)
 
         # Title
         ttk.Label(results_frame, text="Title:").grid(row=0, column=0, sticky="w", pady=2)
@@ -82,11 +120,29 @@ class ContentExtractorGUI:
                        self.hashtags_text, self.article_text):
             widget.configure(state='disabled')
 
+    def browse_location(self):
+        """Open directory browser and update project location"""
+        directory = filedialog.askdirectory(initialdir=self.project_dir)
+        if directory:
+            self.project_dir = directory
+            self.location_entry.delete(0, tk.END)
+            self.location_entry.insert(0, directory)
+            self.save_last_directory()
+
     def process_url(self):
         url = self.url_entry.get().strip()
         if not url:
             messagebox.showerror("Error", "Please enter a URL")
             return
+
+        # Update project directory from entry
+        self.project_dir = self.location_entry.get().strip()
+        if not os.path.exists(self.project_dir):
+            try:
+                os.makedirs(self.project_dir)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to create directory: {str(e)}")
+                return
 
         # Clear previous results
         self.clear_results()
@@ -172,8 +228,15 @@ class ContentExtractorGUI:
         }
 
         try:
+            # Change to project directory before saving
+            current_dir = os.getcwd()
+            os.chdir(self.project_dir)
+
             filename = save_to_file(result, url)
-            messagebox.showinfo("Success", f"Content saved to: {filename}")
+            messagebox.showinfo("Success", f"Content saved to: {os.path.join(self.project_dir, filename)}")
+
+            # Change back to original directory
+            os.chdir(current_dir)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save file: {str(e)}")
 
