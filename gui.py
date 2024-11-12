@@ -178,6 +178,85 @@ class ContentExtractorGUI:
         # Create custom styles
         self.create_styles()
 
+    def save_to_file(self, content, url):
+        """
+        Save content to a file in the project directory
+        """
+        try:
+            # Create a filename from the title or URL
+            title = content.get('title', '')
+            if title:
+                # Clean the title for use as filename
+                filename = "".join(x for x in title if x.isalnum() or x in (' ', '-', '_'))
+                filename = filename.strip().replace(' ', '_')[:50]  # Limit length
+            else:
+                # Use last part of URL if no title
+                filename = url.split('/')[-1].split('?')[0] or 'article'
+
+            # Add timestamp and extension
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{filename}_{timestamp}.json"
+
+            # Create full path using project directory
+            full_path = os.path.join(self.config['project_dir'], filename)
+
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+            # Save the content
+            with open(full_path, 'w', encoding='utf-8') as f:
+                json.dump(content, f, indent=4, ensure_ascii=False)
+
+            return full_path
+        except Exception as e:
+            raise Exception(f"Failed to save file: {str(e)}")
+
+    def process_task(self, task: URLTask):
+        try:
+            task.status = ProcessStatus.PROCESSING
+            task.start_time = datetime.now()
+            self.update_task_display(task)
+
+            result = self.extractor.process_url(task.url)
+
+            if result:
+                task.result = result
+                task.status = ProcessStatus.COMPLETED
+
+                # Auto-save if enabled
+                if self.config['auto_save']:
+                    try:
+                        # Use the new save_to_file method
+                        saved_path = self.save_to_file(result, task.url)
+                        task.saved_path = saved_path
+                    except Exception as e:
+                        print(f"Error auto-saving: {e}")
+            else:
+                task.status = ProcessStatus.ERROR
+                task.error = "Failed to extract content"
+
+        except Exception as e:
+            task.status = ProcessStatus.ERROR
+            task.error = str(e)
+
+        finally:
+            task.end_time = datetime.now()
+            self.update_task_display(task)
+
+    def save_selected(self):
+        if not self.selected_task or not self.selected_task.result:
+            return
+
+        try:
+            # Use the new save_to_file method
+            saved_path = self.save_to_file(self.selected_task.result, self.selected_task.url)
+            self.selected_task.saved_path = saved_path
+            self.update_task_display(self.selected_task)
+
+            messagebox.showinfo("Success", f"Content saved to: {saved_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save file: {str(e)}")
+
     def load_config(self):
         """Load configuration from file"""
         self.config = {
@@ -298,61 +377,7 @@ class ContentExtractorGUI:
         self.config['auto_save'] = self.auto_save_var.get()
         self.save_config()
 
-    def process_task(self, task: URLTask):
-        try:
-            # Update status to processing
-            task.status = ProcessStatus.PROCESSING
-            task.start_time = datetime.now()
-            self.update_task_display(task)
 
-            # Process URL
-            result = self.extractor.process_url(task.url)
-
-            if result:
-                task.result = result
-                task.status = ProcessStatus.COMPLETED
-
-                # Auto-save if enabled
-                if self.config['auto_save']:
-                    try:
-                        # Ensure project directory exists
-                        os.makedirs(self.config['project_dir'], exist_ok=True)
-
-                        # Save the file
-                        filename = save_to_file(result, task.url)
-                        task.saved_path = os.path.join(self.config['project_dir'], filename)
-                    except Exception as e:
-                        print(f"Error auto-saving: {e}")
-            else:
-                task.status = ProcessStatus.ERROR
-                task.error = "Failed to extract content"
-
-        except Exception as e:
-            task.status = ProcessStatus.ERROR
-            task.error = str(e)
-
-        finally:
-            task.end_time = datetime.now()
-            self.update_task_display(task)
-
-    def save_selected(self):
-        if not self.selected_task or not self.selected_task.result:
-            return
-
-        try:
-            # Create project directory if it doesn't exist
-            os.makedirs(self.config['project_dir'], exist_ok=True)
-
-            # Save the file
-            filename = save_to_file(self.selected_task.result, self.selected_task.url)
-            full_path = os.path.join(self.config['project_dir'], filename)
-
-            self.selected_task.saved_path = full_path
-            self.update_task_display(self.selected_task)
-
-            messagebox.showinfo("Success", f"Content saved to: {full_path}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save file: {str(e)}")
 
     def update_display(self):
         # Update status
@@ -382,9 +407,6 @@ class ContentExtractorGUI:
         }
         return status_colors.get(self.task.status, "black")
 
-    def on_click(self, event):
-        if self.on_select:
-            self.on_select(self.task)
 
     def create_right_panel(self, parent):
         # Result view
