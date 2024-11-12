@@ -1,13 +1,13 @@
+import time
+from typing import Optional, Dict, List
+
 import requests
 from bs4 import BeautifulSoup
-import json
 from langchain_community.llms import Ollama
-from typing import Optional, Dict, List
-import time
 
 
 class ContentExtractor:
-    def __init__(self, model_name: str = "llama2"):
+    def __init__(self, model_name: str = "llama3.2"):
         self.llm = Ollama(model=model_name)
 
     def get_url_content(self, url: str) -> Optional[Dict[str, str]]:
