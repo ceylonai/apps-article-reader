@@ -41,10 +41,11 @@ class URLTask:
 
 
 class TaskPanel(ttk.Frame):
-    def __init__(self, parent, task: URLTask, on_select=None):
+    def __init__(self, parent, task: URLTask, on_select=None, on_restart=None):
         super().__init__(parent)
         self.task = task
         self.on_select = on_select
+        self.on_restart = on_restart
 
         self.selected = False
         self.configure(relief="raised", borderwidth=1)
@@ -60,17 +61,26 @@ class TaskPanel(ttk.Frame):
         url_display = ttk.Label(self, text=task.url, wraplength=300)
         url_display.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
+        # Restart button
+        self.restart_button = ttk.Button(
+            self,
+            text="↻",
+            width=3,
+            command=self._handle_restart
+        )
+        self.restart_button.grid(row=0, column=2, padx=5, pady=5)
+
         # Progress bar
         self.progress_var = tk.DoubleVar(value=0)
         self.progress_bar = ttk.Progressbar(
             self, length=200, mode='determinate',
             variable=self.progress_var
         )
-        self.progress_bar.grid(row=1, column=0, columnspan=2, padx=5, sticky="ew")
+        self.progress_bar.grid(row=1, column=0, columnspan=3, padx=5, sticky="ew")
 
         # Status info (Duration and Save Path)
         self.info_frame = ttk.Frame(self)
-        self.info_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=(0, 5), sticky="ew")
+        self.info_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=(0, 5), sticky="ew")
 
         self.duration_label = ttk.Label(self.info_frame, text="Duration: Not started")
         self.duration_label.pack(side="left", padx=5)
@@ -81,9 +91,15 @@ class TaskPanel(ttk.Frame):
         # Bind click event
         self.bind('<Button-1>', self.on_click)
         for child in self.winfo_children():
-            child.bind('<Button-1>', self.on_click)
+            if child != self.restart_button:  # Don't bind click event to restart button
+                child.bind('<Button-1>', self.on_click)
 
         self.update_display()
+
+    def _handle_restart(self):
+        """Handle restart button click"""
+        if self.on_restart:
+            self.on_restart(self.task)
 
     def update_display(self):
         # Update status
@@ -103,6 +119,14 @@ class TaskPanel(ttk.Frame):
             self.save_path_label.configure(
                 text=f"Saved: {os.path.basename(self.task.saved_path)}"
             )
+        else:
+            self.save_path_label.configure(text="")
+
+        # Update restart button state
+        if self.task.status in [ProcessStatus.COMPLETED, ProcessStatus.ERROR]:
+            self.restart_button.state(['!disabled'])
+        else:
+            self.restart_button.state(['disabled'])
 
         # Update panel style based on selection
         if self.selected:
@@ -403,6 +427,23 @@ class ContentExtractorGUI:
                        self.hashtags_text, self.article_text):
             widget.configure(state='disabled')
 
+    def restart_task(self, task: URLTask):
+        """Restart a completed or failed task"""
+        # Reset task status
+        task.status = ProcessStatus.QUEUED
+        task.progress = 0
+        task.error = None
+        task.result = None
+        task.start_time = None
+        task.end_time = None
+        task.saved_path = None
+
+        # Update display
+        self.update_task_display(task)
+
+        # Add back to processing queue
+        self.task_queue.put(task)
+
     def add_url(self):
         url = self.url_entry.get().strip()
         if not url:
@@ -414,7 +455,12 @@ class ContentExtractorGUI:
         self.tasks[task.id] = task
 
         # Create and add task panel
-        panel = TaskPanel(self.tasks_container, task, on_select=self.select_task)
+        panel = TaskPanel(
+            self.tasks_container,
+            task,
+            on_select=self.select_task,
+            on_restart=self.restart_task  # Add restart callback
+        )
         panel.pack(fill=tk.X, padx=5, pady=2)
 
         # Add to processing queue
