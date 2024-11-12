@@ -28,6 +28,7 @@ class URLTask:
         self.result = None
         self.start_time = None
         self.end_time = None
+        self.saved_path = None
 
     @property
     def duration(self):
@@ -67,9 +68,15 @@ class TaskPanel(ttk.Frame):
         )
         self.progress_bar.grid(row=1, column=0, columnspan=2, padx=5, sticky="ew")
 
-        # Duration label
-        self.duration_label = ttk.Label(self, text="Duration: Not started")
-        self.duration_label.grid(row=2, column=0, columnspan=2, padx=5, pady=(0, 5), sticky="w")
+        # Status info (Duration and Save Path)
+        self.info_frame = ttk.Frame(self)
+        self.info_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=(0, 5), sticky="ew")
+
+        self.duration_label = ttk.Label(self.info_frame, text="Duration: Not started")
+        self.duration_label.pack(side="left", padx=5)
+
+        self.save_path_label = ttk.Label(self.info_frame, text="")
+        self.save_path_label.pack(side="right", padx=5)
 
         # Bind click event
         self.bind('<Button-1>', self.on_click)
@@ -90,6 +97,12 @@ class TaskPanel(ttk.Frame):
 
         # Update duration
         self.duration_label.configure(text=f"Duration: {self.task.duration}")
+
+        # Update save path if available
+        if self.task.saved_path:
+            self.save_path_label.configure(
+                text=f"Saved: {os.path.basename(self.task.saved_path)}"
+            )
 
         # Update panel style based on selection
         if self.selected:
@@ -131,15 +144,38 @@ class ContentExtractorGUI:
         self.process_queue_thread = threading.Thread(target=self.process_queue, daemon=True)
         self.process_queue_thread.start()
 
-        # Load last used directory
+        # Load configuration
         self.config_file = "content_extractor_config.json"
-        self.project_dir = self.load_last_directory()
+        self.load_config()
 
         # Create main layout
         self.create_layout()
 
         # Create custom styles
         self.create_styles()
+
+    def load_config(self):
+        """Load configuration from file"""
+        self.config = {
+            'project_dir': os.getcwd(),
+            'auto_save': True
+        }
+
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r') as f:
+                    saved_config = json.load(f)
+                    self.config.update(saved_config)
+        except Exception as e:
+            print(f"Error loading config: {e}")
+
+    def save_config(self):
+        """Save configuration to file"""
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump(self.config, f)
+        except Exception as e:
+            print(f"Error saving config: {e}")
 
     def create_styles(self):
         style = ttk.Style()
@@ -162,6 +198,36 @@ class ContentExtractorGUI:
         self.create_right_panel(right_panel)
 
     def create_left_panel(self, parent):
+        # Settings Frame
+        settings_frame = ttk.LabelFrame(parent, text="Settings", padding="5")
+        settings_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Project Directory Selection
+        dir_frame = ttk.Frame(settings_frame)
+        dir_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Label(dir_frame, text="Project Directory:").pack(side=tk.LEFT, padx=(0, 5))
+
+        self.dir_var = tk.StringVar(value=self.config['project_dir'])
+        dir_entry = ttk.Entry(dir_frame, textvariable=self.dir_var, state='readonly')
+        dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+
+        dir_button = ttk.Button(dir_frame, text="Browse", command=self.select_project_dir)
+        dir_button.pack(side=tk.RIGHT)
+
+        # Auto-save Option
+        auto_save_frame = ttk.Frame(settings_frame)
+        auto_save_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.auto_save_var = tk.BooleanVar(value=self.config['auto_save'])
+        auto_save_cb = ttk.Checkbutton(
+            auto_save_frame,
+            text="Auto-save articles after processing",
+            variable=self.auto_save_var,
+            command=self.update_auto_save
+        )
+        auto_save_cb.pack(side=tk.LEFT)
+
         # URL Input
         input_frame = ttk.LabelFrame(parent, text="Add New Task", padding="5")
         input_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -191,6 +257,110 @@ class ContentExtractorGUI:
 
         scrollbar.pack(side="right", fill="y")
         self.tasks_canvas.pack(side="left", fill="both", expand=True)
+
+    def select_project_dir(self):
+        """Open directory selection dialog"""
+        dir_path = filedialog.askdirectory(
+            initialdir=self.config['project_dir'],
+            title="Select Project Directory"
+        )
+        if dir_path:
+            self.config['project_dir'] = dir_path
+            self.dir_var.set(dir_path)
+            self.save_config()
+
+    def update_auto_save(self):
+        """Update auto-save configuration"""
+        self.config['auto_save'] = self.auto_save_var.get()
+        self.save_config()
+
+    def process_task(self, task: URLTask):
+        try:
+            # Update status to processing
+            task.status = ProcessStatus.PROCESSING
+            task.start_time = datetime.now()
+            self.update_task_display(task)
+
+            # Process URL
+            result = self.extractor.process_url(task.url)
+
+            if result:
+                task.result = result
+                task.status = ProcessStatus.COMPLETED
+
+                # Auto-save if enabled
+                if self.config['auto_save']:
+                    try:
+                        # Ensure project directory exists
+                        os.makedirs(self.config['project_dir'], exist_ok=True)
+
+                        # Save the file
+                        filename = save_to_file(result, task.url)
+                        task.saved_path = os.path.join(self.config['project_dir'], filename)
+                    except Exception as e:
+                        print(f"Error auto-saving: {e}")
+            else:
+                task.status = ProcessStatus.ERROR
+                task.error = "Failed to extract content"
+
+        except Exception as e:
+            task.status = ProcessStatus.ERROR
+            task.error = str(e)
+
+        finally:
+            task.end_time = datetime.now()
+            self.update_task_display(task)
+
+    def save_selected(self):
+        if not self.selected_task or not self.selected_task.result:
+            return
+
+        try:
+            # Create project directory if it doesn't exist
+            os.makedirs(self.config['project_dir'], exist_ok=True)
+
+            # Save the file
+            filename = save_to_file(self.selected_task.result, self.selected_task.url)
+            full_path = os.path.join(self.config['project_dir'], filename)
+
+            self.selected_task.saved_path = full_path
+            self.update_task_display(self.selected_task)
+
+            messagebox.showinfo("Success", f"Content saved to: {full_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save file: {str(e)}")
+
+    def update_display(self):
+        # Update status
+        self.status_label.configure(
+            text=self.task.status.value,
+            foreground=self.get_status_color()
+        )
+
+        # Update progress
+        self.progress_var.set(self.task.progress)
+
+        # Update duration
+        self.duration_label.configure(text=f"Duration: {self.task.duration}")
+
+        # Update panel style based on selection
+        if self.selected:
+            self.configure(style='Selected.TFrame')
+        else:
+            self.configure(style='TFrame')
+
+    def get_status_color(self):
+        status_colors = {
+            ProcessStatus.QUEUED: "gray",
+            ProcessStatus.PROCESSING: "blue",
+            ProcessStatus.COMPLETED: "green",
+            ProcessStatus.ERROR: "red"
+        }
+        return status_colors.get(self.task.status, "black")
+
+    def on_click(self, event):
+        if self.on_select:
+            self.on_select(self.task)
 
     def create_right_panel(self, parent):
         # Result view
@@ -269,31 +439,6 @@ class ContentExtractorGUI:
             # Wait for next task
             self.task_queue.task_done()
 
-    def process_task(self, task: URLTask):
-        try:
-            # Update status to processing
-            task.status = ProcessStatus.PROCESSING
-            task.start_time = datetime.now()
-            self.update_task_display(task)
-
-            # Process URL
-            result = self.extractor.process_url(task.url)
-
-            if result:
-                task.result = result
-                task.status = ProcessStatus.COMPLETED
-            else:
-                task.status = ProcessStatus.ERROR
-                task.error = "Failed to extract content"
-
-        except Exception as e:
-            task.status = ProcessStatus.ERROR
-            task.error = str(e)
-
-        finally:
-            task.end_time = datetime.now()
-            self.update_task_display(task)
-
     def update_task_display(self, task: URLTask = None):
         """Update all task panels or a specific task panel if task is provided"""
         self.root.after(0, self._do_update_task_display, task)
@@ -339,27 +484,6 @@ class ContentExtractorGUI:
         for widget in (self.title_text, self.keywords_text, self.summary_text,
                        self.hashtags_text, self.article_text):
             widget.configure(state='disabled')
-
-    def save_selected(self):
-        if not self.selected_task or not self.selected_task.result:
-            return
-
-        try:
-            # Create project directory if it doesn't exist
-            if not os.path.exists(self.project_dir):
-                os.makedirs(self.project_dir)
-
-            # Change to project directory before saving
-            current_dir = os.getcwd()
-            os.chdir(self.project_dir)
-
-            filename = save_to_file(self.selected_task.result, self.selected_task.url)
-            messagebox.showinfo("Success", f"Content saved to: {os.path.join(self.project_dir, filename)}")
-
-            # Change back to original directory
-            os.chdir(current_dir)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save file: {str(e)}")
 
     def load_last_directory(self):
         try:
